@@ -10,17 +10,44 @@ results = model(source, stream=True)
 
 print("トラッキングを開始します！終了は 'q' キーです。")
 
+# ウィンドウを先に作成してからスライダーを追加
+cv2.namedWindow('Tulip Detection (CoreML)')
+cv2.createTrackbar('Threshold %', 'Tulip Detection (CoreML)', 80, 100, lambda x: None)
+
 for result in results:
     frame = result.orig_img
-    
-    # 検出された箱の座標 (xyxy: 左上と右下) を取得
-    boxes = result.boxes.xyxy.cpu().numpy()
 
-    for box in boxes:
+    # スライダーの値を信頼度閾値として取得 (0〜100 → 0.0〜1.0)
+    threshold = cv2.getTrackbarPos('Threshold %', 'Tulip Detection (CoreML)') / 100.0
+
+    # 検出された箱の座標、クラス、信頼度を取得
+    boxes = result.boxes.xyxy.cpu().numpy()
+    confs = result.boxes.conf.cpu().numpy()
+    clss = result.boxes.cls.cpu().numpy()
+    names = result.names
+
+    # 閾値を超えた検出の中で信頼度が最も高い1つだけを選ぶ
+    best = max(
+        ((box, conf, cls) for box, conf, cls in zip(boxes, confs, clss) if conf >= threshold),
+        key=lambda x: x[1],
+        default=None,
+    )
+
+    if best is not None:
+        box, conf, cls = best
         x1, y1, x2, y2 = map(int, box)
-        
+        label = names[int(cls)]
+        text = f"{label} {conf:.2f}"
+
+        # 中心座標を計算して出力
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        print(f"{label} (conf={conf:.2f}) 中心座標: ({cx}, {cy})")
+
         # 青い四角を描画 (OpenCVは BGR なので (255, 0, 0) が青)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+
+        # ラベルと信頼度を描画
+        cv2.putText(frame, text, (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
     # 画面に表示
     cv2.imshow('Tulip Detection (CoreML)', frame)
