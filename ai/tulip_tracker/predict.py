@@ -1,5 +1,7 @@
 from ultralytics import YOLO
 import cv2
+import socket
+import json
 
 # 見事に変換できたMac専用モデルを読み込む！
 model = YOLO('best.mlpackage')
@@ -7,6 +9,11 @@ model = YOLO('best.mlpackage')
 # Webカメラを起動 (映らない場合は '1' に変更)
 source = 0
 results = model(source, stream=True)
+
+# UDP送信の設定 (Unity側は同じポートで受信する)
+UNITY_HOST = '127.0.0.1'
+UNITY_PORT = 5005
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 print("トラッキングを開始します！終了は 'q' キーです。")
 
@@ -42,6 +49,10 @@ for result in results:
         # 中心座標を計算して出力
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         print(f"{label} (conf={conf:.2f}) 中心座標: ({cx}, {cy})")
+
+        # 中心座標をUnityにUDPで送信
+        payload = json.dumps({"x": cx, "y": cy, "conf": round(float(conf), 2)})
+        sock.sendto(payload.encode(), (UNITY_HOST, UNITY_PORT))
 
         # 青い四角を描画 (OpenCVは BGR なので (255, 0, 0) が青)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
