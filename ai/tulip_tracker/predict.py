@@ -46,12 +46,15 @@ for result in results:
         label = names[int(cls)]
         text = f"{label} {conf:.2f}"
 
-        # 中心座標を計算して出力
+        # 中心座標を計算して正規化 (0.0〜1.0)
+        h, w = frame.shape[:2]
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-        print(f"{label} (conf={conf:.2f}) 中心座標: ({cx}, {cy})")
+        cx_norm = round(cx / w, 4)
+        cy_norm = round(cy / h, 4)
+        print(f"{label} (conf={conf:.2f}) 中心座標(正規化): ({cx_norm}, {cy_norm})")
 
-        # 中心座標をUnityにUDPで送信
-        payload = json.dumps({"x": cx, "y": cy, "conf": round(float(conf), 2)})
+        # 正規化した中心座標をUnityにUDPで送信
+        payload = json.dumps({"x": cx_norm, "y": cy_norm, "conf": round(float(conf), 2)})
         sock.sendto(payload.encode(), (UNITY_HOST, UNITY_PORT))
 
         # 青い四角を描画 (OpenCVは BGR なので (255, 0, 0) が青)
