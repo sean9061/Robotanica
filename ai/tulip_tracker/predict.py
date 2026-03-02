@@ -2,6 +2,7 @@ from ultralytics import YOLO
 import cv2
 import socket
 import json
+import numpy as np
 
 # 見事に変換できたMac専用モデルを読み込む！
 model = YOLO('best.mlpackage')
@@ -11,8 +12,8 @@ source = 0
 results = model(source, stream=True)
 
 # UDP送信の設定 (Unity側は同じポートで受信する)
-UNITY_HOST = '127.0.0.1'
-UNITY_PORT = 5005
+UNITY_HOST = '192.168.10.2'
+UNITY_PORT = 5004
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 print("トラッキングを開始します！終了は 'q' キーです。")
@@ -51,10 +52,21 @@ for result in results:
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
         cx_norm = round(cx / w, 4)
         cy_norm = round(cy / h, 4)
-        print(f"{label} (conf={conf:.2f}) 中心座標(正規化): ({cx_norm}, {cy_norm})")
 
-        # 正規化した中心座標をUnityにUDPで送信
-        payload = json.dumps({"x": cx_norm, "y": cy_norm, "conf": round(float(conf), 2)})
+        # 擬似奥行きを正規化 (チューリップ実幅=4cm固定を利用)
+        # bbox横幅が大きい=近い=depth小、小さい=遠い=depth大
+        bbox_w = x2 - x1
+        bbox_h = y2 - y1
+
+        f = 20
+        real_w = 4
+
+        depth_norm = (f * real_w) / bbox_w
+
+        print(f"{label} (conf={conf:.2f}) 中心座標(正規化): ({cx_norm}, {cy_norm}) 奥行き？: {depth_norm}")
+
+        # 正規化した中心座標・奥行きをUnityにUDPで送信
+        payload = json.dumps({"x": cx_norm, "y": cy_norm, "w": bbox_w, "h": bbox_h, "conf": round(float(conf), 2)})
         sock.sendto(payload.encode(), (UNITY_HOST, UNITY_PORT))
 
         # 青い四角を描画 (OpenCVは BGR なので (255, 0, 0) が青)
