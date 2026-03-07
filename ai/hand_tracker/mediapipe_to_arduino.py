@@ -3,7 +3,7 @@ import mediapipe as mp             # MediaPipe（手の骨格検出）
 import numpy as np                 # NumPy（背景画像生成用）
 import serial
 
-ser = serial.Serial("COM12", 115200)
+ser = serial.Serial("COM7", 115200)
 
 
 # --- 背景色を RGB で指定（ここを自由に変えられる） ---
@@ -11,6 +11,7 @@ BG_COLOR = (0, 100, 100)           # (R, G, B) 黒
 # BG_COLOR = (255, 255, 255)       # 白
 # BG_COLOR = (0, 128, 255)         # オレンジっぽい
 
+# --- WEBカメラ繋いだらたぶん1に変える ---
 cap = cv2.VideoCapture(0)          # デフォルトカメラ（0番）を開く
 
 # カメラ解像度を「要求」する（通らないこともある）
@@ -58,12 +59,12 @@ def main():
 
             frame = cv2.flip(frame, 1) # 左右反転（鏡映し）
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # BGR → RGB 変換
-
             results = hands.process(rgb)  # 手の骨格検出を実行
             isHandTracking = bool(results.multi_hand_landmarks) # 検出されたかどうか
 
+            # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # グレースケールできない
             # canvas = background.copy()    # 背景をコピー（毎フレームまっさらにする）
-            canvas = frame;
+            canvas = frame
             if isHandTracking:  # 手が検出された場合
                 for i, hand_landmarks in enumerate(results.multi_hand_landmarks):   #検出された各手について
 
@@ -74,41 +75,54 @@ def main():
                             hand_landmarks,      # 手のランドマーク情報
                             mp_hands.HAND_CONNECTIONS  # 指の接続線情報
                         )
-                        thumb = hand_landmarks.landmark[4]   #親指先端座標
-                        #root = hand_landmarks.landmark[5]   #人差し指根本座標
-                        index = hand_landmarks.landmark[8]  #人差し指先端座標
-                        pos1 = np.array([int(thumb.x * w), int(thumb.y * h)])
-                        pos2 = np.array([int(index.x * w), int(index.y * h)])
-                        vec = pos2 - pos1
+                        
+                        # 座標から必要値計算
+                        wrist = hand_landmarks.landmark[0]  #手首座標
+                        thumb_tip = hand_landmarks.landmark[4]   #親指先端座標
+                        index_mcp = hand_landmarks.landmark[5]   #人差し指根本座標
+                        index_tip = hand_landmarks.landmark[8]  #人差し指先端座標
+                        pos1 = np.array([int(thumb_tip.x * w), int(thumb_tip.y * h)])
+                        pos2 = np.array([int(index_tip.x * w), int(index_tip.y * h)])
+                        pos3 = np.array([int(wrist.x * w), int(wrist.y * h)])
+                        pos4 = np.array([int(index_mcp.x * w), int(index_mcp.y * h)])
+                        vec1 = pos2 - pos1
+                        vec2 = pos4 - pos3
                         center = (pos1 + pos2)/2
                         center = center.astype('int')
                         vrt = np.array([0,-w])
-                        angle = int(calc_angle(vec, vrt))
-                        angle_8bit = int(np.clip(angle, 0, 255))
-                        radius = int(np.linalg.norm(vec)/2)
+                        angle = int(calc_angle(vec1, vrt))
+                        radius = np.linalg.norm(vec1)/2
+                        radius_norm = np.linalg.norm(vec2)/2
+                        rad = int(radius)    # 描画用
+                        radius = np.clip(radius / radius_norm, 0, 1) #0~1に
+                        
+                        # どちらかコメントアウトコメントアウト可
+                        # radius = 255 * (1 - radius)
+                        radius = int(128 + 128*np.cos(np.pi * radius)) #弾性体みたいにrの両端での変化をなだらかにしたい
+
+                        # シリアル通信用
+                        angle_8bit = int(np.clip(angle, 0, 255))                        
                         radius_8bit = int(np.clip(radius, 0, 255))
                         packet = bytes([0xFF, isHandTracking, radius_8bit, angle_8bit]) #頭4桁はArduinoでの到着判定用
                         
-                        #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
-                        ser.write(packet)     #Arduinoへシリアル通信で送信
-                        
-                        #if ser.in_waiting:
-                        # read = ser.readline().decode().strip()    #受信
-                        
-                        cv2.putText(canvas, str(angle), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0)) 
+                        cv2.putText(canvas, str(radius), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0)) 
                         # cv2.putText(canvas, str(packet), (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
                         # cv2.putText(canvas, str(), (100, 300),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  #Arduinoからの受信を表示
                         cv2.line(canvas, pos1, pos2, color=(0, 255, 0))                 #直線を描画
-                        cv2.circle(canvas, center, radius, color=(0, 255, 0))    #円を描画
+                        cv2.circle(canvas, center, rad, color=(0, 255, 0))    #円を描画
                     else:
+                        packet = bytes([0xFF, isHandTracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
                         cv2.putText(canvas, "Use Right Hand", (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))
             else:
                 packet = bytes([0xFF, isHandTracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
-                ser.write(packet)
                 cv2.putText(canvas, "No Hands Found", (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
                 
-            cv2.imshow("MediaPipe Hands", canvas)  # 画面表示
+            #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
+            ser.write(packet)     #Arduinoへシリアル通信で送信
+            #if ser.in_waiting:
+            # read = ser.readline().decode().strip()    #受信
 
+            cv2.imshow("MediaPipe Hands", canvas)  # 画面表示
             if cv2.waitKey(1) & 0xFF == 27:  # ESCキーで終了
                 break
 
@@ -126,6 +140,7 @@ def calc_angle(vec1, vec2):
         theta *= -1
     return theta + 180
 
+# --- 使わない ---
 #極座標からサーボ制御量
 def servo_control(r, theta, neutral, gain):
     thirds = np.radians([0, 120, 240])                         #モーター位置(3分割)
