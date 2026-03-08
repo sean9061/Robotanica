@@ -9,6 +9,7 @@ public class DwarfMove : MonoBehaviour
     private Transform goal;
     private Rigidbody rb;
     private Animator anim;
+    private float winTime;
 
     enum State
     {
@@ -16,11 +17,11 @@ public class DwarfMove : MonoBehaviour
         OnFlower,
         RightCliff,
         Jumping,
-        Running
-        
+        Running,
+        Fallen
     }
 
-    private State state = State.Running;
+    [SerializeField] private State state = State.Running;
 
     void Start()
     {
@@ -28,13 +29,15 @@ public class DwarfMove : MonoBehaviour
         goal = GameObject.Find("Goal").GetComponent<Transform>();
         rb = GetComponent<Rigidbody>();
         anim = GetComponent<Animator>();
+        winTime = 0;
     }
     void Update()
     {
         if(state == State.Running)
         {
             anim.SetTrigger("run");
-            if(transform.position.x < -5.5f)
+            transform.rotation = Quaternion.EulerAngles(0,90,0); 
+            if(transform.position.x < -5.5f || transform.position.x > 5f)
             {
                 transform.position += new Vector3(0.05f, 0, 0);
             }
@@ -42,7 +45,6 @@ public class DwarfMove : MonoBehaviour
             {
                 state = State.LeftCliff;
             }
-            
         }
         else if(state == State.LeftCliff)
         {
@@ -68,17 +70,24 @@ public class DwarfMove : MonoBehaviour
         }
         else if(state == State.RightCliff)
         {
-            transform.position += transform.forward * 0.1f;
+            transform.rotation = Quaternion.EulerAngles(0,180,0); 
             anim.SetTrigger("win");
+            winTime += Time.deltaTime;
+            if(winTime > 1.0f)
+            {
+                winTime = 0;
+                state = State.Running;    
+            }
         }
         else if(state == State.Jumping)
         {
             anim.SetTrigger("jump");
         }
-        else if(state == State.Running)
+        else if(state == State.Fallen)
         {
-            anim.SetTrigger("run");
+            anim.SetTrigger("fall");
         }
+        
 
     }
 
@@ -103,6 +112,10 @@ public class DwarfMove : MonoBehaviour
         if(col.gameObject.name == "RightCliff")
         {
             state = State.RightCliff;
+        }
+        if(col.gameObject.name == "Ground")
+        {
+            state = State.Fallen;
         }
         
     }

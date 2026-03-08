@@ -591,7 +591,7 @@ Transform:
   m_GameObject: {fileID: 1042569341}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -2.11, y: 7.55, z: -2}
+  m_LocalPosition: {x: -2.15, y: 7.55, z: -2}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1136,7 +1136,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   repeatSpan: 5
   dwarfPref: {fileID: 7840358717168209689, guid: 2c42a84ce8f9cc246ba66208b9bf9cef, type: 3}
-  summonPos: {x: -8, y: 10, z: 0}
+  summonPos: {x: -10, y: 10, z: 0}
 --- !u!1 &1930374864
 GameObject:
   m_ObjectHideFlags: 0
