@@ -3,16 +3,15 @@ import mediapipe as mp             # MediaPipe（手の骨格検出）
 import numpy as np                 # NumPy（背景画像生成用）
 import serial
 
-ser = serial.Serial("COM7", 115200)
-
+################################### Macでは書き換える ###################################
+ser = serial.Serial("COM12", 115200)
+cap = cv2.VideoCapture(0)          # デフォルトカメラ（0番）を開く
+########################################################################################
 
 # --- 背景色を RGB で指定（ここを自由に変えられる） ---
 BG_COLOR = (0, 100, 100)           # (R, G, B) 黒
 # BG_COLOR = (255, 255, 255)       # 白
 # BG_COLOR = (0, 128, 255)         # オレンジっぽい
-
-# --- WEBカメラ繋いだらたぶん1に変える ---
-cap = cv2.VideoCapture(0)          # デフォルトカメラ（0番）を開く
 
 # カメラ解像度を「要求」する（通らないこともある）
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
@@ -21,6 +20,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 mp_hands = mp.solutions.hands      # 手検出モジュールへのショートカット
 mp_draw = mp.solutions.drawing_utils  # 骨格描画ユーティリティ
 
+statepos = [100, 100]   #トラッキングステートメント表示座標
 ntrl = np.array([128,128,128])               #サーボ中心
 
 def main():
@@ -60,26 +60,29 @@ def main():
             frame = cv2.flip(frame, 1) # 左右反転（鏡映し）
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # BGR → RGB 変換
             results = hands.process(rgb)  # 手の骨格検出を実行
-            isHandTracking = bool(results.multi_hand_landmarks) # 検出されたかどうか
+            is_tracking = bool(results.multi_hand_landmarks) # 検出されたかどうか
 
             # frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) # グレースケールできない
             # canvas = background.copy()    # 背景をコピー（毎フレームまっさらにする）
-            canvas = frame
-            if isHandTracking:  # 手が検出された場合
+            frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)    #グレースケール
+            canvas = cv2.cvtColor(frame_gray, cv2.COLOR_GRAY2BGR)
+            
+            # 手が検出された場合
+            if is_tracking:  
                 for i, hand_landmarks in enumerate(results.multi_hand_landmarks):   #検出された各手について
 
                     label = results.multi_handedness[i].classification[0].label
                     if label == "Right":    #右手なら
                         mp_draw.draw_landmarks(
-                            canvas,              # 描画先（カメラ画像ではなく背景）
-                            hand_landmarks,      # 手のランドマーク情報
-                            mp_hands.HAND_CONNECTIONS  # 指の接続線情報
+                            canvas,                     # 描画先
+                            hand_landmarks,             # 手のランドマーク情報
+                            mp_hands.HAND_CONNECTIONS,  # 指の接続線情報
                         )
                         
                         # 座標から必要値計算
-                        wrist = hand_landmarks.landmark[0]  #手首座標
-                        thumb_tip = hand_landmarks.landmark[4]   #親指先端座標
-                        index_mcp = hand_landmarks.landmark[5]   #人差し指根本座標
+                        wrist = hand_landmarks.landmark[0]      #手首座標
+                        thumb_tip = hand_landmarks.landmark[4]  #親指先端座標
+                        index_mcp = hand_landmarks.landmark[5]  #人差し指根本座標
                         index_tip = hand_landmarks.landmark[8]  #人差し指先端座標
                         pos1 = np.array([int(thumb_tip.x * w), int(thumb_tip.y * h)])
                         pos2 = np.array([int(index_tip.x * w), int(index_tip.y * h)])
@@ -90,10 +93,11 @@ def main():
                         center = (pos1 + pos2)/2
                         center = center.astype('int')
                         vrt = np.array([0,-w])
-                        angle = int(calc_angle(vec1, vrt))
+                        angle_raw = int(calc_angle(vec1, vrt))
+                        angle = int(np.clip((angle_raw - 30) * 2,0,360))
                         radius = np.linalg.norm(vec1)/2
                         radius_norm = np.linalg.norm(vec2)/2
-                        rad = int(radius)    # 描画用
+                        radpxl = int(radius)    # 描画用
                         radius = np.clip(radius / radius_norm, 0, 1) #0~1に
                         
                         # どちらかコメントアウトコメントアウト可
@@ -101,21 +105,44 @@ def main():
                         radius = int(128 + 128*np.cos(np.pi * radius)) #弾性体みたいにrの両端での変化をなだらかにしたい
 
                         # シリアル通信用
-                        angle_8bit = int(np.clip(angle, 0, 255))                        
+                        angle_8bit = int(np.clip(angle * 255 / 360, 0, 255))                        
                         radius_8bit = int(np.clip(radius, 0, 255))
-                        packet = bytes([0xFF, isHandTracking, radius_8bit, angle_8bit]) #頭4桁はArduinoでの到着判定用
+                        packet = bytes([0xFF, is_tracking, radius_8bit, angle_8bit])    #頭4桁はArduinoでの到着判定用
+                        packet_str = " ".join(f"0x{b:02X}" for b in packet)             #表示用
                         
-                        cv2.putText(canvas, str(radius), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0)) 
-                        # cv2.putText(canvas, str(packet), (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
+                        # 描画
+                        textpos = center + [radpxl,-radpxl]
+                        cv2.putText(canvas, 
+                                    "raw radius: ".ljust(16) + str(radpxl) + "px", 
+                                    textpos, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
+                        cv2.putText(canvas, 
+                                    "inverse radius: ".ljust(16) + str(radius_8bit) + "/255", 
+                                    textpos+ (0, 40), cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
+                        cv2.putText(canvas, 
+                                    "raw angle: ".ljust(16) + str(angle_raw) + "degree", 
+                                    textpos+ (0, 80), cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)  
+                        cv2.putText(canvas, 
+                                    "angle: ".ljust(16) + str(angle) + "degree",
+                                    textpos + (0, 120),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)  
+                        cv2.putText(canvas, 
+                                    "packet: ".ljust(16) + packet_str,
+                                    textpos + (0, 160),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
                         # cv2.putText(canvas, str(), (100, 300),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  #Arduinoからの受信を表示
-                        cv2.line(canvas, pos1, pos2, color=(0, 255, 0))                 #直線を描画
-                        cv2.circle(canvas, center, rad, color=(0, 255, 0))    #円を描画
+                        cv2.putText(canvas, "Successfully Tracking", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 255, 0),thickness=2)
+                        cv2.line(canvas, pos1, pos2, color=(255-radius_8bit, 255, 255-radius_8bit),thickness=2)                 #直線を描画
+                        cv2.circle(canvas, center, radpxl, color=(255-angle_8bit, 255, angle_8bit),thickness=2)    #円を描画
                     else:
-                        packet = bytes([0xFF, isHandTracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
-                        cv2.putText(canvas, "Use Right Hand", (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))
+                        mp_draw.draw_landmarks(
+                            canvas,                     # 描画先
+                            hand_landmarks,             # 手のランドマーク情報
+                            mp_hands.HAND_CONNECTIONS,   # 指の接続線情報
+                            landmark_drawing_spec=None, # ← 関節を描かない
+                        )
+                        packet = bytes([0xFF, is_tracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
+                        cv2.putText(canvas, "Use Right Hand", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 0, 255),thickness=2)
             else:
-                packet = bytes([0xFF, isHandTracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
-                cv2.putText(canvas, "No Hands Found", (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
+                packet = bytes([0xFF, is_tracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
+                cv2.putText(canvas, "No Hands Found", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 0, 255),thickness=2)  
                 
             #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
             ser.write(packet)     #Arduinoへシリアル通信で送信
@@ -140,15 +167,15 @@ def calc_angle(vec1, vec2):
         theta *= -1
     return theta + 180
 
-# --- 使わない ---
-#極座標からサーボ制御量
-def servo_control(r, theta, neutral, gain):
-    thirds = np.radians([0, 120, 240])                         #モーター位置(3分割)
-    contributions = [r * np.cos(theta - t) for t in thirds]     #投影から貢献度を算出
-    mean = sum(contributions)/3
-    offsets = [c - mean for c in contributions]                 #平均除去:引っ張りすぎないため
-    servos = [int(neutral[i] + gain * offsets[i]) for i in range(3)] #制御量算出
-    servos = np.clip(servos, 0, 255)    #8ビットに丸め込み
-    return servos
+# #--- 使わない ---
+# #極座標からサーボ制御量
+# def servo_control(r, theta, neutral, gain):
+#     thirds = np.radians([0, 120, 240])                         #モーター位置(3分割)
+#     contributions = [r * np.cos(theta - t) for t in thirds]     #投影から貢献度を算出
+#     mean = sum(contributions)/3
+#     offsets = [c - mean for c in contributions]                 #平均除去:引っ張りすぎないため
+#     servos = [int(neutral[i] + gain * offsets[i]) for i in range(3)] #制御量算出
+#     servos = np.clip(servos, 0, 255)    #8ビットに丸め込み
+#     return servos
 
 main()
