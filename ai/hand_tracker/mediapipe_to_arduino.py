@@ -133,9 +133,11 @@ def main():
                     label = results.multi_handedness[i].classification[0].label
                     if label == "Right":    #右手なら
                         mp_draw.draw_landmarks(
-                            canvas,                     # 描画先
-                            hand_landmarks,             # 手のランドマーク情報
+                            canvas,              # 描画先（カメラ画像ではなく背景）
+                            hand_landmarks,      # 手のランドマーク情報
                             mp_hands.HAND_CONNECTIONS,  # 指の接続線情報
+                            mp_draw.DrawingSpec(thickness=2, circle_radius=4),
+                            mp_draw.DrawingSpec(thickness=2)
                         )
                         
                         # 座標から必要値計算
@@ -208,9 +210,8 @@ def main():
                         cv2.putText(canvas, str(radius), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))
                         # cv2.putText(canvas, str(packet), (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
                         # cv2.putText(canvas, str(), (100, 300),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  #Arduinoからの受信を表示
-                        cv2.putText(canvas, "Successfully Tracking", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 255, 0),thickness=2)
-                        cv2.line(canvas, pos1, pos2, color=(255-radius_8bit, 255, 255-radius_8bit),thickness=2)                 #直線を描画
-                        cv2.circle(canvas, center, radpxl, color=(255-angle_8bit, 255, angle_8bit),thickness=2)    #円を描画
+                        cv2.line(canvas, pos1, pos2, color=(0, 255, 0), thickness=3)     #直線を描画
+                        cv2.circle(canvas, center, radpxl, color=(0, 255, 0), thickness=3)  #円を描画
                     else:
                         mp_draw.draw_landmarks(
                             canvas,                     # 描画先

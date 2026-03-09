@@ -25,8 +25,9 @@ HAND_UDP_PORT  = 5100
 TULIP_UDP_PORT = 5101
 PANEL_W, PANEL_H = 640, 360
 FRAME_MARGIN = 28          # カメラ映像の余白(px)
-WIN_W  = PANEL_W * 2      # 1280
-WIN_H  = PANEL_H * 2      # 720
+ARROW_COL_W  = 60          # 矢印専用カラム幅(px)
+WIN_W  = PANEL_W * 2 + ARROW_COL_W  # 1340
+WIN_H  = PANEL_H * 2                # 720
 TIMEOUT_SEC = 0.5
 
 
@@ -119,6 +120,15 @@ def _make_placeholder(text: str, w: int, h: int) -> np.ndarray:
     cv2.putText(img, text, ((w - tw) // 2, (h + th) // 2),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 1)
     return img
+
+
+def _make_arrow_col(h: int) -> np.ndarray:
+    """左右パネルの間に挟む矢印カラム"""
+    col = np.full((h, ARROW_COL_W, 3), 240, dtype=np.uint8)
+    ay = h // 2
+    cv2.arrowedLine(col, (6, ay), (ARROW_COL_W - 6, ay),
+                    (30, 90, 200), 3, tipLength=0.4)
+    return col
 
 
 def _pad_frame(frame: np.ndarray) -> np.ndarray:
@@ -302,16 +312,9 @@ def display_loop(shared: SharedState, stop: threading.Event):
                         (FRAME_MARGIN + 8, FRAME_MARGIN + 22),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2)
 
-        hand_row  = np.hstack([left_panel,  render_servo_panel(snap, PANEL_W, PANEL_H)])
-        tulip_row = np.hstack([right_panel, render_tulip_panel(snap, PANEL_W, PANEL_H)])
-
-        # 境界 (x = PANEL_W) に「画像処理 → 値」を示す矢印を描画
-        ay = PANEL_H // 2
-        for row in [hand_row, tulip_row]:
-            cv2.arrowedLine(row, (PANEL_W - 60, ay), (PANEL_W + 60, ay),
-                            (30, 90, 200), 3, tipLength=0.3)
-            cv2.putText(row, "解析値", (PANEL_W - 36, ay - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 90, 200), 1)
+        arrow_col = _make_arrow_col(PANEL_H)
+        hand_row  = np.hstack([left_panel,  arrow_col, render_servo_panel(snap, PANEL_W, PANEL_H)])
+        tulip_row = np.hstack([right_panel, arrow_col, render_tulip_panel(snap, PANEL_W, PANEL_H)])
 
         canvas = np.vstack([hand_row, tulip_row])
 

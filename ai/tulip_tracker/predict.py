@@ -121,7 +121,7 @@ for result in results:
         # ===== ダッシュボード連携 ここまで =====
 
         # 青い四角を描画 (OpenCVは BGR なので (255, 0, 0) が青)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 3)
 
         # ラベルと信頼度を描画
         cv2.putText(frame, text, (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
