@@ -118,7 +118,7 @@ def _make_placeholder(text: str, w: int, h: int) -> np.ndarray:
     img = np.full((h, w, 3), 210, dtype=np.uint8)
     tw, th = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)[0]
     cv2.putText(img, text, ((w - tw) // 2, (h + th) // 2),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 100, 100), 1, cv2.LINE_AA)
     return img
 
 
@@ -127,7 +127,7 @@ def _make_arrow_col(h: int) -> np.ndarray:
     col = np.full((h, ARROW_COL_W, 3), 240, dtype=np.uint8)
     ay = h // 2
     cv2.arrowedLine(col, (6, ay), (ARROW_COL_W - 6, ay),
-                    (30, 90, 200), 3, tipLength=0.4)
+                    (30, 90, 200), 3, tipLength=0.4, line_type=cv2.LINE_AA)
     return col
 
 
@@ -199,7 +199,7 @@ def draw_bar(canvas: np.ndarray, x: int, y: int, w: int, h: int,
 
 def _dot(canvas: np.ndarray, x: int, y: int, connected: bool):
     color = (30, 160, 30) if connected else (40, 40, 200)
-    cv2.circle(canvas, (x, y), 6, color, -1)
+    cv2.circle(canvas, (x, y), 6, color, -1, cv2.LINE_AA)
 
 
 # ─────────────────────────────────────────────
@@ -211,25 +211,50 @@ def render_servo_panel(snap: dict, w: int, h: int) -> np.ndarray:
     connected = (now - snap["last_hand_t"]) < TIMEOUT_SEC
 
     _dot(canvas, w - 15, 12, connected)
-    cv2.putText(canvas, "SERVO BARS", (8, 18),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1)
+    cv2.putText(canvas, "SERVO (top view)", (8, 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1, cv2.LINE_AA)
+
+    # 上から見た図: 中心から3方向にアームを描画
+    cx = w // 2
+    cy = 30 + (h - 50) // 2
+    max_r = min((h - 50) // 2 - 15, w // 2 - 70)
 
     labels = ["S0", "S1", "S2"]
     colors = [(40, 180, 40), (200, 100, 30), (0, 150, 220)]
-    bar_w, bar_h, y_start = w - 100, 22, 35
+    # servo_control の thirds と同じ 0°, 120°, 240° を画面座標へ変換 (0°=上)
+    base_angles = [0, 120, 240]
 
-    for i, (lbl, col) in enumerate(zip(labels, colors)):
-        y = y_start + i * 38
-        cv2.putText(canvas, lbl, (8, y + 16),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (70, 70, 70), 1)
-        draw_bar(canvas, 40, y, bar_w, bar_h, snap["servo"][i], 255, col)
-        cv2.putText(canvas, str(snap["servo"][i]),
-                    (40 + bar_w + 6, y + 16),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (40, 40, 40), 1)
+    # 外周の参照円
+    cv2.circle(canvas, (cx, cy), max_r, (190, 190, 190), 1, cv2.LINE_AA)
+    # 中心点
+    cv2.circle(canvas, (cx, cy), 7, (100, 100, 100), -1, cv2.LINE_AA)
 
-    y_info = y_start + 3 * 38 + 10
+    for i, (angle_deg, color, lbl) in enumerate(zip(base_angles, colors, labels)):
+        rad = np.radians(angle_deg - 90)   # 画面座標: 0°=上
+        cos_a, sin_a = np.cos(rad), np.sin(rad)
+
+        # 参照線 (グレー細線: ニュートラル=128 の長さ)
+        ref_len = int(max_r * 128 / 255)
+        cv2.line(canvas,
+                 (cx, cy),
+                 (int(cx + max_r * cos_a), int(cy + max_r * sin_a)),
+                 (210, 210, 210), 1, cv2.LINE_AA)
+
+        # 実際のアーム
+        arm_len = int(max_r * snap["servo"][i] / 255)
+        ex = int(cx + arm_len * cos_a)
+        ey = int(cy + arm_len * sin_a)
+        cv2.line(canvas, (cx, cy), (ex, ey), color, 4, cv2.LINE_AA)
+        cv2.circle(canvas, (ex, ey), 6, color, -1, cv2.LINE_AA)
+
+        # ラベルと数値 (外周の外側)
+        lx = int(cx + (max_r + 22) * cos_a) - 14
+        ly = int(cy + (max_r + 22) * sin_a) + 5
+        cv2.putText(canvas, f"{lbl}:{snap['servo'][i]}",
+                    (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
+
     cv2.putText(canvas, f"r={snap['polar_r']:.1f}  theta={snap['polar_theta']:.1f} deg",
-                (8, y_info), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (30, 120, 30), 1)
+                (8, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 120, 30), 1, cv2.LINE_AA)
 
     return canvas
 
@@ -244,39 +269,39 @@ def render_tulip_panel(snap: dict, w: int, h: int) -> np.ndarray:
 
     _dot(canvas, w - 15, 12, connected)
     cv2.putText(canvas, "TULIP METRICS", (8, 18),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1, cv2.LINE_AA)
 
     map_x, map_y, map_size = 12, 30, 120
     cv2.rectangle(canvas, (map_x, map_y), (map_x + map_size, map_y + map_size), (150, 150, 150), 1)
     if snap["tulip_detected"]:
         px = map_x + int(snap["tulip_x"] * map_size)
         py = map_y + int(snap["tulip_y"] * map_size)
-        cv2.circle(canvas, (px, py), 5, (0, 120, 220), -1)
+        cv2.circle(canvas, (px, py), 5, (0, 120, 220), -1, cv2.LINE_AA)
 
     mx, my, line_h = map_x + map_size + 16, map_y + 14, 22
 
-    cv2.putText(canvas, "Conf:", (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1)
+    cv2.putText(canvas, "Conf:", (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
     draw_bar(canvas, mx + 48, my - 14, 120, 16, snap["tulip_conf"], 1.0, (0, 120, 220))
     cv2.putText(canvas, f"{snap['tulip_conf']:.2f}",
-                (mx + 172, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (40, 40, 40), 1)
+                (mx + 172, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (40, 40, 40), 1, cv2.LINE_AA)
 
     my += line_h
     depth = (20 * 4) / snap["tulip_w"] if snap["tulip_w"] > 0 else 0.0
     cv2.putText(canvas, f"Depth: {depth:.1f} cm",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1)
+                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
 
     my += line_h
     cv2.putText(canvas, f"W:{snap['tulip_w']}px  H:{snap['tulip_h']}px",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1)
+                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
 
     my += line_h
     cv2.putText(canvas, f"cx={snap['tulip_x']:.3f}  cy={snap['tulip_y']:.3f}",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 120, 30), 1)
+                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 120, 30), 1, cv2.LINE_AA)
 
     udp_label = "UDP: " + ("●  LIVE" if connected else "●  --")
     cv2.putText(canvas, udp_label, (mx, map_y + map_size - 4),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.48,
-                (30, 160, 30) if connected else (40, 40, 200), 1)
+                (30, 160, 30) if connected else (40, 40, 200), 1, cv2.LINE_AA)
 
     return canvas
 
@@ -302,7 +327,7 @@ def display_loop(shared: SharedState, stop: threading.Event):
             left_panel = _pad_frame(snap["hand_frame"])
             cv2.putText(left_panel, "HAND TRACKING",
                         (FRAME_MARGIN + 8, FRAME_MARGIN + 22),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2, cv2.LINE_AA)
 
         if snap["tulip_frame"] is None or (now - snap["last_tulip_frame_t"]) > TIMEOUT_SEC:
             right_panel = _pad_frame(tulip_placeholder)
@@ -310,7 +335,7 @@ def display_loop(shared: SharedState, stop: threading.Event):
             right_panel = _pad_frame(snap["tulip_frame"])
             cv2.putText(right_panel, "TULIP DETECTION",
                         (FRAME_MARGIN + 8, FRAME_MARGIN + 22),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2, cv2.LINE_AA)
 
         arrow_col = _make_arrow_col(PANEL_H)
         hand_row  = np.hstack([left_panel,  arrow_col, render_servo_panel(snap, PANEL_W, PANEL_H)])
