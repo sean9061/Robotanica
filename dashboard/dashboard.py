@@ -61,6 +61,7 @@ class SharedState:
         self.tulip_detected = False
         self.last_tulip_t   = 0.0
         self.last_tulip_frame_t = 0.0
+        self.tulip_pos_history  = deque(maxlen=120)  # (timestamp, x, y, depth)
 
     def update_hand(self, d: dict):
         with self._lock:
@@ -82,6 +83,10 @@ class SharedState:
                 self.tulip_w    = d.get("w", self.tulip_w)
                 self.tulip_h    = d.get("h", self.tulip_h)
                 self.tulip_conf = d.get("conf", self.tulip_conf)
+                depth_val = (20 * 4) / self.tulip_w if self.tulip_w > 0 else 0.0
+                self.tulip_pos_history.append(
+                    (self.last_tulip_t, self.tulip_x, self.tulip_y, depth_val)
+                )
 
     def set_hand_frame(self, frame: np.ndarray):
         with self._lock:
@@ -112,7 +117,8 @@ class SharedState:
                 "tulip_conf":        self.tulip_conf,
                 "tulip_detected":    self.tulip_detected,
                 "last_tulip_t":      self.last_tulip_t,
-                "last_tulip_frame_t": self.last_tulip_frame_t,
+                "last_tulip_frame_t":  self.last_tulip_frame_t,
+                "tulip_pos_history":   list(self.tulip_pos_history),
             }
 
 
@@ -322,39 +328,114 @@ def render_tulip_panel(snap: dict, w: int, h: int) -> np.ndarray:
     connected = (now - snap["last_tulip_t"]) < TIMEOUT_SEC
 
     _dot(canvas, w - 15, 12, connected)
-    cv2.putText(canvas, "TULIP METRICS", (8, 18),
+    cv2.putText(canvas, "TULIP 3D", (8, 18),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1, cv2.LINE_AA)
 
-    map_x, map_y, map_size = 12, 30, 120
-    cv2.rectangle(canvas, (map_x, map_y), (map_x + map_size, map_y + map_size), (150, 150, 150), 1)
+    # ── 透視投影パラメータ ──────────────────────────────
+    Z_MIN, Z_MAX = -0.2, 1.0   # depth_val のクリップ範囲
+    hz = Z_MAX - Z_MIN         # ボックスの奥行き = 1.2
+    cx, cy = w // 2 - 10, 2 * h // 4
+    yaw    = np.radians(35)
+    pitch  = np.radians(-35)   # 負 = 上から見下ろす
+    cam_d  = 2.2
+    scale  = 300
+
+    def proj(x3, y3, z3):
+        x1 =  x3 * np.cos(yaw) + z3 * np.sin(yaw)
+        z1 = -x3 * np.sin(yaw) + z3 * np.cos(yaw)
+        y2 =  y3 * np.cos(pitch) - z1 * np.sin(pitch)
+        z2 =  y3 * np.sin(pitch) + z1 * np.cos(pitch)
+        zc = max(z2 + cam_d, 0.01)
+        return (cx + int(scale * x1 / zc),
+                cy - int(scale * y2 / zc))
+
+    def proj_zc(x3, y3, z3):
+        """proj と同じ変換で zc (カメラ距離) を返す"""
+        z1 = -x3 * np.sin(yaw) + z3 * np.cos(yaw)
+        z2 =  y3 * np.sin(pitch) + z1 * np.cos(pitch)
+        return max(z2 + cam_d, 0.01)
+
+    # ── ワイヤーフレームボックス ────────────────────────
+    hx, hy = 0.75, 0.75
+    corners = [
+        (-hx, -hy,  0 ), ( hx, -hy,  0 ),
+        ( hx,  hy,  0 ), (-hx,  hy,  0 ),
+        (-hx, -hy,  hz), ( hx, -hy,  hz),
+        ( hx,  hy,  hz), (-hx,  hy,  hz),
+    ]
+    edges = [(0,1),(1,2),(2,3),(3,0),
+             (4,5),(5,6),(6,7),(7,4),
+             (0,4),(1,5),(2,6),(3,7)]
+    far_set = {4, 5, 6, 7}
+
+    pts2d = [proj(*c) for c in corners]
+    for a, b in edges:
+        col = (190, 190, 190) if (a in far_set or b in far_set) else (120, 120, 120)
+        cv2.line(canvas, pts2d[a], pts2d[b], col, 1, cv2.LINE_AA)
+
+    # ── 軸ラベル ───────────────────────────────────────
+    lx = proj(hx + 0.08, -hy, 0)
+    cv2.putText(canvas, "X", lx, cv2.FONT_HERSHEY_SIMPLEX, 0.38, (160, 60, 60), 1, cv2.LINE_AA)
+    ly = proj(0, hy + 0.08, 0)
+    cv2.putText(canvas, "Y", ly, cv2.FONT_HERSHEY_SIMPLEX, 0.38, (60, 160, 60), 1, cv2.LINE_AA)
+    lz = proj(-hx, -hy, hz + 0.15)
+    cv2.putText(canvas, "Z(depth)", (lz[0] - 10, lz[1]),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (60, 60, 180), 1, cv2.LINE_AA)
+
+    # ── 軌跡描画 (直近1秒) ────────────────────────────
+    def to3d(rx, ry, rd):
+        return (rx - 0.5, -(ry - 0.5), Z_MAX - float(np.clip(rd, Z_MIN, Z_MAX)))
+
+    now_t = time.time()
+    history = [(rx, ry, rd) for (t, rx, ry, rd) in snap.get("tulip_pos_history", [])
+               if now_t - t <= 1.0]
+    if len(history) >= 2:
+        for i in range(1, len(history)):
+            alpha = i / len(history)          # 古い=暗い、新しい=明るい
+            col = (int(180 * alpha), int(180 * alpha), int(220 * alpha + 35))
+            p1 = proj(*to3d(*history[i - 1]))
+            p2 = proj(*to3d(*history[i]))
+            cv2.line(canvas, p1, p2, col, 2, cv2.LINE_AA)
+
+    # ── チューリップ位置プロット ──────────────────────
+    depth_val = 0.0
     if snap["tulip_detected"]:
-        px = map_x + int(snap["tulip_x"] * map_size)
-        py = map_y + int(snap["tulip_y"] * map_size)
-        cv2.circle(canvas, (px, py), 5, (0, 120, 220), -1, cv2.LINE_AA)
+        tx = snap["tulip_x"] - 0.5
+        ty = -(snap["tulip_y"] - 0.5)
+        depth_val = (20 * 4) / snap["tulip_w"] if snap["tulip_w"] > 0 else (Z_MIN + Z_MAX) / 2
+        tz = Z_MAX - float(np.clip(depth_val, Z_MIN, Z_MAX))   # Z反転
 
-    mx, my, line_h = map_x + map_size + 16, map_y + 14, 22
+        tp = proj(tx, ty, tz)
 
-    cv2.putText(canvas, "Conf:", (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
-    draw_bar(canvas, mx + 48, my - 14, 120, 16, snap["tulip_conf"], 1.0, (0, 120, 220))
-    cv2.putText(canvas, f"{snap['tulip_conf']:.2f}",
-                (mx + 172, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (40, 40, 40), 1, cv2.LINE_AA)
+        # 床面への影 (y = -hy)
+        fp = proj(tx, -hy, tz)
+        cv2.line(canvas, tp, fp, (160, 140, 100), 1, cv2.LINE_AA)
+        cv2.circle(canvas, fp, 4, (160, 140, 100), -1, cv2.LINE_AA)
 
-    my += line_h
-    depth = (20 * 4) / snap["tulip_w"] if snap["tulip_w"] > 0 else 0.0
-    cv2.putText(canvas, f"Depth: {depth:.1f} cm",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
+        # 手前面への影 (z = 0)
+        sp = proj(tx, ty, 0)
+        cv2.line(canvas, tp, sp, (140, 140, 200), 1, cv2.LINE_AA)
+        cv2.circle(canvas, sp, 3, (140, 140, 200), -1, cv2.LINE_AA)
 
-    my += line_h
-    cv2.putText(canvas, f"W:{snap['tulip_w']}px  H:{snap['tulip_h']}px",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
+        # 本体点 (遠近法: 近いほど大きく)
+        zc_val = proj_zc(tx, ty, tz)
+        r = max(4, int(12 * cam_d / zc_val))
+        cv2.circle(canvas, tp, r + 1, (0, 80, 180),  1, cv2.LINE_AA)
+        cv2.circle(canvas, tp, r,     (0, 120, 220), -1, cv2.LINE_AA)
 
-    my += line_h
-    cv2.putText(canvas, f"cx={snap['tulip_x']:.3f}  cy={snap['tulip_y']:.3f}",
-                (mx, my), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 120, 30), 1, cv2.LINE_AA)
+    # ── テキスト情報 ──────────────────────────────────
+    yt = h - 38
+    cv2.putText(canvas,
+                f"x={snap['tulip_x']:.2f}  y={snap['tulip_y']:.2f}  depth={depth_val:.1f}",
+                (8, yt), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (40, 40, 40), 1, cv2.LINE_AA)
+    yt += 18
+    cv2.putText(canvas,
+                f"conf={snap['tulip_conf']:.2f}  W:{snap['tulip_w']}px  H:{snap['tulip_h']}px",
+                (8, yt), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (40, 40, 40), 1, cv2.LINE_AA)
 
-    udp_label = "UDP: " + ("●  LIVE" if connected else "●  --")
-    cv2.putText(canvas, udp_label, (mx, map_y + map_size - 4),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.48,
+    udp_label = "UDP: " + ("LIVE" if connected else "--")
+    cv2.putText(canvas, udp_label, (w - 75, 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4,
                 (30, 160, 30) if connected else (40, 40, 200), 1, cv2.LINE_AA)
 
     return canvas
