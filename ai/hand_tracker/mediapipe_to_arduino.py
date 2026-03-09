@@ -4,9 +4,67 @@ import numpy as np                 # NumPy（背景画像生成用）
 import serial
 
 ################################### Macでは書き換える ###################################
-ser = serial.Serial("COM12", 115200)
-cap = cv2.VideoCapture(0)          # デフォルトカメラ（0番）を開く
+SERIAL_PORT = "/dev/tty.usbserial-0001"
+cap = cv2.VideoCapture(1)          # デフォルトカメラ（0番）を開く
 ########################################################################################
+import socket
+
+# ===== ダッシュボード連携 ここから =====
+import json as _json
+import http.server
+import socketserver
+import threading
+import time
+# ===== ダッシュボード連携 ここまで =====
+
+# ダッシュボードのIPアドレス ← 環境に合わせて変更
+DASHBOARD_IP = "127.0.0.1"
+
+try:
+    ser = serial.Serial(SERIAL_PORT, 115200)
+except serial.SerialException as e:
+    print(f"[Serial ERROR] {e}")
+    ser = None
+_dash_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# ===== ダッシュボード連携 ここから =====
+# カメラ映像をダッシュボードへ MJPEG ストリームで配信する (ポート5102)
+# ダッシュボードを使わない場合もこのサーバーは無害に動き続ける
+_mjpeg_frame = None
+_mjpeg_lock  = threading.Lock()
+
+class _MjpegHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=frame')
+        self.end_headers()
+        try:
+            while True:
+                with _mjpeg_lock:
+                    f = _mjpeg_frame
+                if f is not None:
+                    ok, buf = cv2.imencode('.jpg', f, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    if ok:
+                        b = buf.tobytes()
+                        self.wfile.write(
+                            b'--frame\r\nContent-Type: image/jpeg\r\n'
+                            b'Content-Length: ' + str(len(b)).encode() + b'\r\n\r\n'
+                        )
+                        self.wfile.write(b)
+                        self.wfile.write(b'\r\n')
+                time.sleep(1 / 30)
+        except Exception:
+            pass
+
+class _MjpegServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+_srv = _MjpegServer(('', 5102), _MjpegHandler)
+threading.Thread(target=_srv.serve_forever, daemon=True).start()
+print("[MJPEG] hand stream on :5102")
+# ===== ダッシュボード連携 ここまで =====
+
 
 # --- 背景色を RGB で指定（ここを自由に変えられる） ---
 BG_COLOR = (0, 100, 100)           # (R, G, B) 黒
@@ -24,6 +82,7 @@ statepos = [100, 100]   #トラッキングステートメント表示座標
 ntrl = np.array([128,128,128])               #サーボ中心
 
 def main():
+    global _mjpeg_frame
     # --- 最初のフレームで実サイズを確定 ---
     ret, frame = cap.read()            # 1フレームだけ先に取得
     if not ret:                        # 取得に失敗したら
@@ -127,6 +186,27 @@ def main():
                         cv2.putText(canvas, 
                                     "packet: ".ljust(16) + packet_str,
                                     textpos + (0, 160),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
+                        packet = bytes([0xFF, isHandTracking, radius_8bit, angle_8bit]) #頭4桁はArduinoでの到着判定用
+                        
+                        #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
+                        if ser: ser.write(packet)     #Arduinoへシリアル通信で送信
+                        # ===== ダッシュボード連携: サーボ値・手の位置をUDP送信 =====
+                        servo = servo_control(radius, np.radians(angle), ntrl, 1.0)
+                        _dash_sock.sendto(_json.dumps({
+                            "servo": [int(s) for s in servo],
+                            "r": round(float(radius), 1),
+                            "theta_deg": round(float(angle), 1),
+                            "thumb": [round(thumb_tip.x, 4), round(thumb_tip.y, 4)],
+                            "index": [round(index_tip.x, 4), round(index_tip.y, 4)],
+                            "detected": True
+                        }).encode(), (DASHBOARD_IP, 5100))
+                        # ===== ダッシュボード連携 ここまで =====
+
+                        #if ser.in_waiting:
+                        # read = ser.readline().decode().strip()    #受信
+
+                        cv2.putText(canvas, str(radius), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))
+                        # cv2.putText(canvas, str(packet), (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
                         # cv2.putText(canvas, str(), (100, 300),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  #Arduinoからの受信を表示
                         cv2.putText(canvas, "Successfully Tracking", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 255, 0),thickness=2)
                         cv2.line(canvas, pos1, pos2, color=(255-radius_8bit, 255, 255-radius_8bit),thickness=2)                 #直線を描画
@@ -142,14 +222,17 @@ def main():
                         cv2.putText(canvas, "Use Right Hand", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 0, 255),thickness=2)
             else:
                 packet = bytes([0xFF, is_tracking, 0x00, 0x00]) #頭4桁はArduinoでの到着判定用
-                cv2.putText(canvas, "No Hands Found", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 0, 255),thickness=2)  
-                
-            #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
-            ser.write(packet)     #Arduinoへシリアル通信で送信
-            #if ser.in_waiting:
-            # read = ser.readline().decode().strip()    #受信
+                if ser: ser.write(packet)
+                # ===== ダッシュボード連携: 未検出をUDP送信 =====
+                _dash_sock.sendto(_json.dumps({"detected": False}).encode(), (DASHBOARD_IP, 5100))
+                # ===== ダッシュボード連携 ここまで =====
+                cv2.putText(canvas, "No Hands Found", statepos,cv2.FONT_HERSHEY_DUPLEX,1.5,(0, 0, 255),thickness=2)
 
             cv2.imshow("MediaPipe Hands", canvas)  # 画面表示
+            # ===== ダッシュボード連携: 映像フレームをMJPEGサーバーに渡す =====
+            with _mjpeg_lock:
+                _mjpeg_frame = cv2.resize(canvas, (640, 360))
+            # ===== ダッシュボード連携 ここまで =====
             if cv2.waitKey(1) & 0xFF == 27:  # ESCキーで終了
                 break
 
