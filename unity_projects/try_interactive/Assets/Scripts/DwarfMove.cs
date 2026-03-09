@@ -120,5 +120,4 @@ public class DwarfMove : MonoBehaviour
         
     }
 
-    //勝利コルーチン
 }
