@@ -14,6 +14,7 @@ import json
 import socket
 import threading
 import time
+from collections import deque
 
 import cv2
 import numpy as np
@@ -29,6 +30,7 @@ ARROW_COL_W  = 60          # 矢印専用カラム幅(px)
 WIN_W  = PANEL_W * 2 + ARROW_COL_W  # 1340
 WIN_H  = PANEL_H * 2                # 720
 TIMEOUT_SEC = 0.5
+SERVO_HISTORY_LEN = 50 
 
 
 # ─────────────────────────────────────────────
@@ -48,6 +50,7 @@ class SharedState:
         self.hand_detected = False
         self.last_hand_t   = 0.0
         self.last_hand_frame_t = 0.0
+        self.servo_history = deque(maxlen=SERVO_HISTORY_LEN)
 
         # tulip tracker データ
         self.tulip_x        = 0.5
@@ -67,6 +70,7 @@ class SharedState:
                 self.servo       = d.get("servo", self.servo)
                 self.polar_r     = d.get("r", self.polar_r)
                 self.polar_theta = d.get("theta_deg", self.polar_theta)
+                self.servo_history.append(list(self.servo))
 
     def update_tulip(self, d: dict):
         with self._lock:
@@ -100,6 +104,7 @@ class SharedState:
                 "hand_detected":     self.hand_detected,
                 "last_hand_t":       self.last_hand_t,
                 "last_hand_frame_t": self.last_hand_frame_t,
+                "servo_history":     list(self.servo_history),
                 "tulip_x":           self.tulip_x,
                 "tulip_y":           self.tulip_y,
                 "tulip_w":           self.tulip_w,
@@ -205,58 +210,107 @@ def _dot(canvas: np.ndarray, x: int, y: int, connected: bool):
 # ─────────────────────────────────────────────
 #  下段左: サーボバー
 # ─────────────────────────────────────────────
-def render_servo_panel(snap: dict, w: int, h: int) -> np.ndarray:
+def _render_servo_topview(snap: dict, w: int, h: int) -> np.ndarray:
+    """サーボの上面図 (中心から3方向アーム)"""
     canvas = np.full((h, w, 3), 240, dtype=np.uint8)
-    now = time.time()
-    connected = (now - snap["last_hand_t"]) < TIMEOUT_SEC
 
-    _dot(canvas, w - 15, 12, connected)
     cv2.putText(canvas, "SERVO (top view)", (8, 18),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1, cv2.LINE_AA)
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (40, 40, 40), 1, cv2.LINE_AA)
 
-    # 上から見た図: 中心から3方向にアームを描画
     cx = w // 2
     cy = 30 + (h - 50) // 2
-    max_r = min((h - 50) // 2 - 15, w // 2 - 70)
+    max_r = min((h - 50) // 2 - 15, w // 2 - 55)
 
     labels = ["S0", "S1", "S2"]
     colors = [(40, 180, 40), (200, 100, 30), (0, 150, 220)]
-    # servo_control の thirds と同じ 0°, 120°, 240° を画面座標へ変換 (0°=上)
-    base_angles = [0, 120, 240]
+    base_angles = [0, 120, 240]   # servo_control の thirds と同じ角度
 
-    # 外周の参照円
     cv2.circle(canvas, (cx, cy), max_r, (190, 190, 190), 1, cv2.LINE_AA)
-    # 中心点
     cv2.circle(canvas, (cx, cy), 7, (100, 100, 100), -1, cv2.LINE_AA)
 
     for i, (angle_deg, color, lbl) in enumerate(zip(base_angles, colors, labels)):
         rad = np.radians(angle_deg - 90)   # 画面座標: 0°=上
         cos_a, sin_a = np.cos(rad), np.sin(rad)
 
-        # 参照線 (グレー細線: ニュートラル=128 の長さ)
-        ref_len = int(max_r * 128 / 255)
         cv2.line(canvas,
                  (cx, cy),
                  (int(cx + max_r * cos_a), int(cy + max_r * sin_a)),
                  (210, 210, 210), 1, cv2.LINE_AA)
 
-        # 実際のアーム
         arm_len = int(max_r * snap["servo"][i] / 255)
         ex = int(cx + arm_len * cos_a)
         ey = int(cy + arm_len * sin_a)
         cv2.line(canvas, (cx, cy), (ex, ey), color, 4, cv2.LINE_AA)
         cv2.circle(canvas, (ex, ey), 6, color, -1, cv2.LINE_AA)
 
-        # ラベルと数値 (外周の外側)
-        lx = int(cx + (max_r + 22) * cos_a) - 14
-        ly = int(cy + (max_r + 22) * sin_a) + 5
+        lx = int(cx + (max_r + 20) * cos_a) - 14
+        ly = int(cy + (max_r + 20) * sin_a) + 5
         cv2.putText(canvas, f"{lbl}:{snap['servo'][i]}",
-                    (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
+                    (lx, ly), cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
 
-    cv2.putText(canvas, f"r={snap['polar_r']:.1f}  theta={snap['polar_theta']:.1f} deg",
-                (8, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 120, 30), 1, cv2.LINE_AA)
+    cv2.putText(canvas, f"r={snap['polar_r']:.1f} th={snap['polar_theta']:.1f}",
+                (6, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (30, 120, 30), 1, cv2.LINE_AA)
 
     return canvas
+
+
+def _render_servo_chart(snap: dict, w: int, h: int) -> np.ndarray:
+    """サーボ値の時系列ラインチャート"""
+    canvas = np.full((h, w, 3), 240, dtype=np.uint8)
+
+    cv2.putText(canvas, "SERVO history", (8, 18),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (40, 40, 40), 1, cv2.LINE_AA)
+
+    ml, mr, mt, mb = 28, 10, 26, 28   # margin left/right/top/bottom
+    cw = w - ml - mr
+    ch = h - mt - mb
+
+    # 背景・枠
+    cv2.rectangle(canvas, (ml, mt), (ml + cw, mt + ch), (225, 225, 225), -1)
+    cv2.rectangle(canvas, (ml, mt), (ml + cw, mt + ch), (170, 170, 170), 1)
+
+    # Y軸グリッド & ラベル (0, 128, 255)
+    for val, lbl in [(0, "0"), (128, "128"), (255, "255")]:
+        y = mt + ch - int(ch * val / 255)
+        cv2.line(canvas, (ml, y), (ml + cw, y), (200, 200, 200), 1, cv2.LINE_AA)
+        cv2.putText(canvas, lbl, (2, y + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.3, (120, 120, 120), 1, cv2.LINE_AA)
+
+    # ラインチャート描画
+    history = snap.get("servo_history", [])
+    colors  = [(40, 180, 40), (200, 100, 30), (0, 150, 220)]
+    labels  = ["S0", "S1", "S2"]
+    n = len(history)
+    if n >= 2:
+        for si, (color, lbl) in enumerate(zip(colors, labels)):
+            pts = [
+                (ml + int(cw * t / (SERVO_HISTORY_LEN - 1)),
+                 mt + ch - int(ch * history[t][si] / 255))
+                for t in range(n)
+            ]
+            for j in range(1, len(pts)):
+                cv2.line(canvas, pts[j - 1], pts[j], color, 2, cv2.LINE_AA)
+
+    # 凡例
+    lx = ml + 6
+    for color, lbl in zip(colors, labels):
+        cv2.line(canvas, (lx, mt + 8), (lx + 14, mt + 8), color, 2, cv2.LINE_AA)
+        cv2.putText(canvas, lbl, (lx + 16, mt + 12),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1, cv2.LINE_AA)
+        lx += 40
+
+    return canvas
+
+
+def render_servo_panel(snap: dict, w: int, h: int) -> np.ndarray:
+    now = time.time()
+    connected = (now - snap["last_hand_t"]) < TIMEOUT_SEC
+    half = w // 2
+    left  = _render_servo_topview(snap, half, h)
+    right = _render_servo_chart(snap, w - half, h)
+    panel = np.hstack([left, right])
+    _dot(panel, w - 15, 12, connected)
+    return panel
 
 
 # ─────────────────────────────────────────────
