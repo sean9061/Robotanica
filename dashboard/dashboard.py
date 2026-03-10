@@ -133,12 +133,43 @@ def _make_placeholder(text: str, w: int, h: int) -> np.ndarray:
     return img
 
 
-def _make_arrow_col(h: int) -> np.ndarray:
-    """左右パネルの間に挟む矢印カラム"""
+def _make_arrow_col(h: int, connected: bool = False, t: float = 0.0) -> np.ndarray:
+    """>>> スタイルの矢印カラム。connected=True のとき順番に光るアニメーション"""
     col = np.full((h, ARROW_COL_W, 3), 240, dtype=np.uint8)
     ay = h // 2
-    cv2.arrowedLine(col, (6, ay), (ARROW_COL_W - 6, ay),
-                    (30, 90, 200), 3, tipLength=0.4, line_type=cv2.LINE_AA)
+
+    # 3つのシェブロン(>) の起点X座標
+    n = 3
+    chevron_xs = [8, 22, 36]
+    cw, ch = 12, 9   # 幅, 半高さ
+
+    if not connected:
+        for cx_ch in chevron_xs:
+            top = (cx_ch,      ay - ch)
+            mid = (cx_ch + cw, ay)
+            bot = (cx_ch,      ay + ch)
+            cv2.line(col, top, mid, (185, 185, 185), 3, cv2.LINE_AA)
+            cv2.line(col, mid, bot, (185, 185, 185), 3, cv2.LINE_AA)
+        return col
+
+    # アニメーション: 0.45秒で1周、1つずつ明るく点灯
+    period = 0.45
+    active = int((t % period) / period * n)
+
+    for i, cx_ch in enumerate(chevron_xs):
+        alpha = 1.0 if i == active else 0.2
+        color = (
+            int(30  + 225 * alpha),
+            int(90  + 165 * alpha),
+            int(150 + 105 * alpha),
+        )
+        thickness = 4 if i == active else 2
+        top = (cx_ch,      ay - ch)
+        mid = (cx_ch + cw, ay)
+        bot = (cx_ch,      ay + ch)
+        cv2.line(col, top, mid, color, thickness, cv2.LINE_AA)
+        cv2.line(col, mid, bot, color, thickness, cv2.LINE_AA)
+
     return col
 
 
@@ -472,9 +503,12 @@ def display_loop(shared: SharedState, stop: threading.Event):
                         (FRAME_MARGIN + 8, FRAME_MARGIN + 22),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2, cv2.LINE_AA)
 
-        arrow_col = _make_arrow_col(PANEL_H)
-        hand_row  = np.hstack([left_panel,  arrow_col, render_servo_panel(snap, PANEL_W, PANEL_H)])
-        tulip_row = np.hstack([right_panel, arrow_col, render_tulip_panel(snap, PANEL_W, PANEL_H)])
+        hand_connected  = snap["hand_detected"]
+        tulip_connected = snap["tulip_detected"]
+        hand_arrow  = _make_arrow_col(PANEL_H, hand_connected,  now)
+        tulip_arrow = _make_arrow_col(PANEL_H, tulip_connected, now)
+        hand_row  = np.hstack([left_panel,  hand_arrow,  render_servo_panel(snap, PANEL_W, PANEL_H)])
+        tulip_row = np.hstack([right_panel, tulip_arrow, render_tulip_panel(snap, PANEL_W, PANEL_H)])
 
         canvas = np.vstack([hand_row, tulip_row])
 
