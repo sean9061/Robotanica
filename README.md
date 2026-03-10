@@ -1,112 +1,301 @@
-# **Kinetic-Botanics**
-LITALICO ワンダー 渋谷 メンターフェス
+# 🌷 Kinetic-Botanics
 
-## 1. SSHセットアップ（初回のみ）
+[![License](https://img.shields.io/badge/license-【ライセンス名】-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://www.python.org/)
+[![Unity](https://img.shields.io/badge/Unity-2022%20LTS-000000?logo=unity)](https://unity.com/)
+[![Arduino](https://img.shields.io/badge/Arduino-ESP32-00979D?logo=arduino)](https://www.arduino.cc/)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](https://github.com)
 
-プライベートリポジトリにアクセスするために、SSHキーの作成と登録が必要です。
+> コンピュータビジョン・サーボ制御・リアルタイム3D可視化を融合した、インタラクティブ体感型アートインスタレーション。
 
-### A. SSHキーの作成
-ターミナル（Mac）または Git Bash / PowerShell（Windows）で以下のコマンドを実行します。
+[ここにデモ動画や展示の写真へのリンクを追記してください]
 
-```bash
-# SSHキーの生成（メールアドレスは自分のものに変更）
-ssh-keygen -t ed25519 -C "your_email@example.com"
+---
 
-# 全てエンターキーを数回押して完了（パスフレーズは任意）
+## 概要
+
+**Kinetic-Botanics** は、人の手の動きとカメラによる花（チューリップ）の検出を組み合わせ、物理的なサーボモーターと3DCGを同時に制御するアートインスタレーションです。
+
+- 手の動き → Arduino ESP32 経由で**サーボモーター3本**をリアルタイム制御
+- カメラによる花の検出 → Unity の**3Dオブジェクトをリアルタイムアニメーション**
+- 全データを集約した**監視ダッシュボード**でシステム状態を可視化
+
+[ここにプロジェクトの背景・展示コンセプトについて追記してください]
+
+---
+
+## 特徴
+
+- **手トラッキング（MediaPipe）**: Webカメラで手の骨格をリアルタイム推定。指の開き・回転角からサーボ制御値を算出
+- **チューリップ検出（YOLO + CoreML）**: カスタム学習済みモデルで花を検出し、位置・信頼度をUDP送信
+- **Arduino ESP32 サーボ制御**: 3軸サーボを極座標ベースで制御（0xFF ヘッダ + 3バイトプロトコル）
+- **Unity 3D 可視化**: 花の位置・サイズをリアルタイムに3Dオブジェクトへマッピング（5種類のインタラクティブシーン）
+- **リアルタイムダッシュボード**: 両カメラ映像・サーボ値・検出データを1画面に集約。MJPEGストリーム＋UDP受信による多マシン対応
+- **マルチマシン構成**: macOS × 2台（AIトラッキング）＋ Windows × 1台（Unity・ダッシュボード）を LAN で連携
+
+---
+
+## システム構成
+
+```
+mac2: Hand Tracker
+  カメラ → MediaPipe → Serial (Arduino ESP32)
+                    → UDP [dashboard_ip]:5100  (JSON: servo/polar/detected)
+                    → HTTP 0.0.0.0:5102        (MJPEG 映像ストリーム)
+
+mac3: Tulip Tracker
+  カメラ → YOLO (CoreML) → UDP [unity_ip]:5004    (JSON → Unity)
+                         → UDP [dashboard_ip]:5101 (JSON: x/y/w/h/conf/detected)
+                         → HTTP 0.0.0.0:5103       (MJPEG 映像ストリーム)
+
+win1: Unity + Dashboard
+  Unity     ← UDP :5004
+  Dashboard ← UDP :5100 / :5101
+            ← http://[mac2_ip]:5102/  (手の映像)
+            ← http://[mac3_ip]:5103/  (チューリップの映像)
+
+Arduino ESP32
+  ← Serial from mac2 (0xFF ヘッダ + radius + angle)
+  GPIO 25, 26, 27 → サーボ3本 (0–255 → 0–180°)
 ```
 
-### B. 公開鍵をコピーする
+---
 
-作成された公開鍵（`.pub` ファイル）の中身をコピーします。
+## 前提条件
 
-#### **Mac の場合**
-ターミナルで実行：
-```bash
-pbcopy < ~/.ssh/id_ed25519.pub
-```
+### 共通
+- Git
 
-#### **Windows の場合**
-PowerShellで実行：
-```powershell
-Get-Content $HOME\.ssh\id_ed25519.pub | Set-Clipboard
-```
+### mac2 / mac3 (Python 環境)
+- Python 3.10 以上
+- USB接続のWebカメラ
+- （mac3のみ）Apple Silicon Mac（CoreML推論に必要）
 
-### C. GitHubへの登録
-1. GitHubの [SSH and GPG keys](https://github.com/settings/keys) ページを開きます。
-2. **「New SSH key」** ボタンを押します。
-3. **Title** にPCの識別名を入力し、**Key** にコピーした内容を貼り付けて保存します。
+### win1 (Unity + ダッシュボード)
+- Unity 2022 LTS 以上
+- Python 3.10 以上
 
-### D. 接続確認
-```bash
-ssh -T git@github.com
-# 「Hi [ユーザー名]! You've successfully authenticated...」と出ればOK
-```
+### ハードウェア
+- Arduino ESP32 開発ボード
+- サーボモーター × 3
+- スイッチングハブ（マルチマシン接続用）
 
-## 2. 初期セットアップと開発準備
-プロジェクトの導入から、作業用ブランチを作成するまでの流れです。
+---
+
+## インストール
+
+### 1. リポジトリのクローン
 
 ```bash
-# A. リポジトリのクローン
-git clone git@github.com:sean9061/Kinetic-Botanics.git
+git clone https://github.com/sean9061/Kinetic-Botanics.git
 cd Kinetic-Botanics
+```
 
-# B. 作業用ブランチの作成（プロジェクト開始時など大きな区切りで作成）
-# 命名規則：feature/your-task-name
+### 2. Hand Tracker のセットアップ（mac2）
+
+```bash
+cd ai/hand_tracker
+pip install -r requirements.txt
+```
+
+### 3. Tulip Tracker のセットアップ（mac3）
+
+```bash
+cd ai/tulip_tracker
+pip install -r requirements.txt
+```
+
+### 4. ダッシュボードのセットアップ（win1）
+
+```bash
+cd dashboard
+pip install -r requirements.txt
+```
+
+### 5. Arduino ファームウェアの書き込み
+
+Arduino IDE で `hardware/arduino_from_mediapipe.ino` を ESP32 に書き込みます（ボーレート: 115200）。
+
+ライブラリ: `ESP32Servo`（Arduino IDE のライブラリマネージャーからインストール）
+
+### 6. Unity プロジェクトを開く
+
+Unity Hub から `unity_projects/try_interactive/` を Unity 2022 LTS で開きます。
+
+---
+
+## 設定
+
+各スクリプトの先頭にある定数を環境に合わせて変更してください。
+
+| ファイル | 定数 | 説明 |
+|---------|------|------|
+| `ai/hand_tracker/mediapipe_to_arduino.py` | `SERIAL_PORT` | ArduinoのCOMポート（例: `/dev/tty.usbserial-0001`） |
+| `ai/hand_tracker/mediapipe_to_arduino.py` | `DASHBOARD_IP` | ダッシュボードを動かすマシンのIPアドレス |
+| `ai/tulip_tracker/predict.py` | `DASHBOARD_IP` | 同上 |
+| `ai/tulip_tracker/predict.py` | `UNITY_HOST` | UnityマシンのIPアドレス |
+
+---
+
+## 使い方
+
+本番環境では各マシンで以下を起動します。
+
+### mac2: Hand Tracker
+
+```bash
+cd ai/hand_tracker
+python mediapipe_to_arduino.py
+# カメラ映像ウィンドウが開き、右手を検出するとサーボが動きます
+# ESC キーで終了
+```
+
+### mac3: Tulip Tracker
+
+```bash
+cd ai/tulip_tracker
+python predict.py
+# カメラ映像とYOLO検出結果がウィンドウに表示されます
+# スライダーで検出閾値を調整できます (デフォルト: 80%)
+# q キーで終了
+```
+
+### win1: ダッシュボード（本番）
+
+```bash
+python dashboard/dashboard.py --hand-host [mac2のIP] --tulip-host [mac3のIP]
+```
+
+### ローカルテスト（1台で全部動かす場合）
+
+各スクリプトの `DASHBOARD_IP` を `127.0.0.1` に変更した上で:
+
+```bash
+# ターミナル1
+python ai/hand_tracker/mediapipe_to_arduino.py
+
+# ターミナル2
+python ai/tulip_tracker/predict.py
+
+# ターミナル3
+python dashboard/dashboard.py --hand-host 127.0.0.1 --tulip-host 127.0.0.1
+```
+
+### Unity シーン
+
+`unity_projects/try_interactive/Assets/Scenes/` から用途に合わせてシーンを選択:
+
+| シーン | 内容 |
+|--------|------|
+| `UDP Interactive.unity` | 花の位置でオブジェクトをインタラクティブ制御 |
+| `UDP Dwarf.unity` | ドワーフキャラクターを制御 |
+| `UDP Joint.unity` | 骨格アニメーション |
+| `Serial Interactive.unity` | シリアル（Arduino）による制御 |
+
+---
+
+## 開発者向けガイド
+
+### ブランチ戦略
+
+```bash
+# 作業ブランチを作成
 git checkout -b feature/your-task-name
-```
 
-## 3. 日常の開発サイクル
-作成したブランチで作業を進め、定期的に同期・共有します。
+# mainの最新を取り込む
+git pull --rebase origin main
 
-### A. 最新の変更を取り込む
-他のメンバーの更新を、自分の作業ブランチに直接反映します。
-```bash
-# GitHub上の最新(main)を、今のブランチに直接取り込む
-git pull origin main
-```
-
-### B. コミット・プッシュ
-作業の区切りで変更を保存し、GitHubへアップロードします。
-```bash
-git add .
-git commit -m "変更内容の概要"
+# 変更をプッシュ
 git push origin feature/your-task-name
 ```
 
-### C. プルリクエスト (PR) の作成
-GitHub上でPRを作成し、チームにレビューを依頼します。マージ後も、そのブランチでそのまま作業を続けて構いません。
+### YOLOモデルの再学習・エクスポート
 
-## 開発ルール（適当に）
+```bash
+cd ai/tulip_tracker
 
-### ブランチ・コミット
-- **ブランチ名**: 誰の作業か分かればOKです（例：`name-dev`, `feature-sensor`）。
-- **コミット**: 1日の終わりや、キリの良いところでこまめに保存しましょう。
-- **メッセージ**: 「動いた」「バグ修正」など、あとで見返して内容が分かる程度でOK。
+# PyTorchモデルをCoreML形式にエクスポート（mac3のApple Silicon向け）
+python export.py
 
-### プルリクエスト (PR)
-- **共有**: PRは「マージしてほしい時」だけでなく、「今の進捗を見てほしい時」にも気軽に出してください。
-- **マージ**: 基本は自分でマージしてOKですが、大きな変更の時は一言声をかけ合いましょう。
+# UDP受信テスト
+python udp_receiver_test.py
+```
 
-### セキュリティ・品質
-- **機密情報**: APIキーやパスワード（`.env`等）は、**絶対に GitHub にプッシュしないでください。**
-- **コメント**: 複雑な処理を書いたら、未来の自分や仲間のために一言メモを残してください。
-- **相談**: 迷ったら一人で悩まず、すぐにチームメンバーに相談しましょう。
+### ダッシュボードのポート一覧
 
-## 用語集
+| ポート | 種別 | データ内容 |
+|--------|------|-----------|
+| 5100 | UDP (受信) | Hand Tracker JSON（servo/polar/detected） |
+| 5101 | UDP (受信) | Tulip Tracker JSON（x/y/w/h/conf/detected） |
+| 5102 | HTTP (取得) | Hand Tracker MJPEG 映像 |
+| 5103 | HTTP (取得) | Tulip Tracker MJPEG 映像 |
+| 5004 | UDP (受信) | Tulip → Unity (花の位置情報) |
 
-| 用語 | 説明 |
-| :--- | :--- |
-| **リポジトリ** | プロジェクトの全ファイルと変更履歴を保存する場所。 |
-| **メイン (main)** | プロジェクトの「本番」用ブランチ。常に動く状態を維持します。 |
-| **ブランチ (Branch)** | 歴史を枝分かれさせ、他の作業に影響を与えず開発するコピー環境。 |
-| **コミット (Commit)** | 作業内容をメッセージと共に保存すること。 |
-| **プッシュ (Push)** | ローカル（PC内）のコミットを GitHub（リモート）へ送ること。 |
-| **プル (Pull)** | GitHub（リモート）の最新の変更をローカル（PC内）へ取り込むこと。 |
-| **プルリクエスト (PR)** | 変更内容を報告し、`main` への合流（マージ）を依頼する機能。 |
-| **レビュー (Review)** | チームメンバーがコードを確認し、フィードバックを行うこと。 |
-| **マージ (Merge)** | ブランチで行った変更を別のブランチ（主に `main`）に統合すること。 |
-| **コンフリクト (Conflict)** | 同じ箇所が同時に編集され、自動で合流できない「競合」状態。 |
+### Arduino シリアルプロトコル
 
+```
+[0xFF] [is_tracking] [radius_8bit] [angle_8bit]
+  ↑         ↑              ↑             ↑
+ヘッダ  検出フラグ    指の開き幅      回転角
+(固定)  (0 or 1)    (0–255)       (0–255)
+```
 
 ---
-💡 このドキュメントの構成と初期設定は、**Gemini CLI** との対話を通じて作成されました。
+
+## ディレクトリ構成
+
+```
+Kinetic-Botanics/
+├── ai/
+│   ├── hand_tracker/
+│   │   ├── mediapipe_to_arduino.py   # MediaPipe手検出 → Serial/UDP/MJPEG
+│   │   └── requirements.txt
+│   └── tulip_tracker/
+│       ├── predict.py                # YOLO花検出 → UDP/MJPEG
+│       ├── export.py                 # PyTorch → CoreML変換
+│       ├── udp_receiver_test.py      # UDP受信テスト
+│       ├── best.pt                   # 学習済みモデル (PyTorch)
+│       ├── best.mlpackage/           # 学習済みモデル (CoreML)
+│       └── requirements.txt
+├── dashboard/
+│   ├── dashboard.py                  # リアルタイム監視ダッシュボード
+│   └── requirements.txt
+├── hardware/
+│   └── arduino_from_mediapipe.ino    # ESP32 ファームウェア
+└── unity_projects/
+    └── try_interactive/
+        └── Assets/
+            ├── Scenes/               # インタラクティブシーン (5種)
+            └── Scripts/              # C#スクリプト (24ファイル)
+```
+
+---
+
+## 貢献について
+
+バグ報告・機能提案・Pull Request を歓迎しています！
+
+1. このリポジトリを **Fork** する
+2. `feature/your-feature` ブランチを作成する
+3. 変更をコミット・プッシュする
+4. **Pull Request** を作成する
+
+バグ報告や機能提案は [Issues](https://github.com/sean9061/Kinetic-Botanics/issues) からお気軽にどうぞ。
+
+---
+
+## 開発チーム
+
+このプロジェクトは **【開発チーム名】** によって開発されました。
+
+[ここにチームメンバーのGitHubアカウントや役割を追記してください]
+
+---
+
+## ライセンス
+
+このプロジェクトは **【ライセンス名（例: MIT License）】** のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルをご確認ください。
+
+---
+
+<sub>💡 README の構成は <a href="https://claude.ai/code">Claude Code</a> との対話を通じて作成されました。</sub>
