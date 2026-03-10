@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
 
+///////////////////////別PCはこっち///////////////////////
 public class UDPReceiver_ : MonoBehaviour
 {
     UdpClient client;
