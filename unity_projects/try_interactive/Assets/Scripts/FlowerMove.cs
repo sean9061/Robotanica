@@ -31,7 +31,7 @@ public class FlowerMove : MonoBehaviour
         y = -2*y + 1;
         z = z * depthScale;
 
-        Vector3 targetPos = new Vector3(x, y, z);
+        Vector3 targetPos = new Vector3(x, 0, 0);
         targetPos = Vector3.Scale(targetPos, moveRange) + startPos;
         transform.position = targetPos;
 

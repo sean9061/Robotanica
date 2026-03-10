@@ -951,7 +951,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 666413429}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1455,8 +1455,8 @@ Transform:
   m_GameObject: {fileID: 975437571}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -8, y: 2.5, z: 0}
-  m_LocalScale: {x: 5, y: 10, z: 10}
+  m_LocalPosition: {x: -10.5, y: 2.5, z: 0}
+  m_LocalScale: {x: 10, y: 10, z: 10}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1541,7 +1541,7 @@ Transform:
   m_GameObject: {fileID: 1042569341}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 3, z: -0.59}
+  m_LocalPosition: {x: 0, y: 7, z: -0.59}
   m_LocalScale: {x: 2, y: 2, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1562,7 +1562,7 @@ MonoBehaviour:
   udp: {fileID: 1042569347}
   moveScale: 5
   depthScale: 0.001
-  moveRange: {x: 5, y: 5, z: 3}
+  moveRange: {x: 10, y: 5, z: 3}
 --- !u!114 &1042569347
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3014,9 +3014,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 09b8e503e64c5b44bba690de095fb3c5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  repeatSpan: 5
+  repeatSpan: 7.5
   dwarfPref: {fileID: 7840358717168209689, guid: 2c42a84ce8f9cc246ba66208b9bf9cef, type: 3}
-  summonPos: {x: -10, y: 10, z: 0}
+  summonPos: {x: -13, y: 10, z: 0}
 --- !u!114 &1818544597
 MonoBehaviour:
   m_ObjectHideFlags: 0

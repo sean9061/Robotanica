@@ -10,6 +10,7 @@ public class DwarfMove : MonoBehaviour
     private Rigidbody rb;
     private Animator anim;
     private float winTime;
+    private float killTime;
 
     enum State
     {
@@ -37,9 +38,14 @@ public class DwarfMove : MonoBehaviour
         {
             anim.SetTrigger("run");
             transform.rotation = Quaternion.EulerAngles(0,90,0); 
-            if(transform.position.x < -5.5f || transform.position.x > 5f)
+            if(transform.position.x < -5.5f)
             {
                 transform.position += new Vector3(0.05f, 0, 0);
+            }
+            else if(transform.position.x > 5f)
+            {
+                transform.position += new Vector3(0.05f, 0, 0);
+                killTime += Time.deltaTime;
             }
             else
             {
@@ -86,9 +92,14 @@ public class DwarfMove : MonoBehaviour
         else if(state == State.Fallen)
         {
             anim.SetTrigger("fall");
+            transform.position += new Vector3(0, 0, -0.05f);
+            killTime += Time.deltaTime;
         }
-        
 
+        // インスタンス削除
+        if(transform.position.x > 15f || transform.position.z < -5f || transform.position.z < -10f || killTime > 15f){
+            Destroy(this.gameObject);
+        }
     }
 
     void JumpTo(Vector3 target)
@@ -118,6 +129,13 @@ public class DwarfMove : MonoBehaviour
             state = State.Fallen;
         }
         
+    }
+    void OnCollisionStay(Collision col)
+    {
+        if(col.gameObject.name == "Ground")
+        {
+            state = State.Fallen;
+        }
     }
 
 }
