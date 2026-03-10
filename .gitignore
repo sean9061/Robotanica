@@ -53,3 +53,5 @@ env/
 .pio/
 .clang_complete
 .gcc-flags.json
+
+CLAUDE.md
