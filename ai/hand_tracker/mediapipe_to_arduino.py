@@ -5,7 +5,7 @@ import serial
 
 ################################### Macでは書き換える ###################################
 SERIAL_PORT = "/dev/tty.usbserial-0001"
-cap = cv2.VideoCapture(1)          # デフォルトカメラ（0番）を開く
+cap = cv2.VideoCapture(0)          # デフォルトカメラ（0番）を開く
 ########################################################################################
 import socket
 
@@ -184,11 +184,11 @@ def main():
                                     textpos+ (0, 80), cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)  
                         cv2.putText(canvas, 
                                     "angle: ".ljust(16) + str(angle) + "degree",
-                                    textpos + (0, 120),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)  
+                                    textpos + (0, 120),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
                         cv2.putText(canvas, 
                                     "packet: ".ljust(16) + packet_str,
                                     textpos + (0, 160),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0),thickness=1)
-                        packet = bytes([0xFF, isHandTracking, radius_8bit, angle_8bit]) #頭4桁はArduinoでの到着判定用
+                        packet = bytes([0xFF, is_tracking, radius_8bit, angle_8bit]) #頭4桁はArduinoでの到着判定用
                         
                         #if ser.out_waiting:    #out_waitingを書くとArduino側でSerial.available()がfalseになる
                         if ser: ser.write(packet)     #Arduinoへシリアル通信で送信
@@ -210,8 +210,8 @@ def main():
                         cv2.putText(canvas, str(radius), pos2, cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))
                         # cv2.putText(canvas, str(packet), (100, 200),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  
                         # cv2.putText(canvas, str(), (100, 300),cv2.FONT_HERSHEY_SIMPLEX,1.0,(0, 255, 0))  #Arduinoからの受信を表示
-                        cv2.line(canvas, pos1, pos2, color=(0, 255, 0), thickness=3)     #直線を描画
-                        cv2.circle(canvas, center, radpxl, color=(0, 255, 0), thickness=3)  #円を描画
+                        cv2.line(canvas, pos1, pos2, color=(255-radius_8bit, 255, 255-radius_8bit), thickness=3)     #直線を描画
+                        cv2.circle(canvas, center, radpxl, color=(255-angle_8bit, 255, angle_8bit), thickness=3)  #円を描画
                     else:
                         mp_draw.draw_landmarks(
                             canvas,                     # 描画先
@@ -251,15 +251,14 @@ def calc_angle(vec1, vec2):
         theta *= -1
     return theta + 180
 
-# #--- 使わない ---
-# #極座標からサーボ制御量
-# def servo_control(r, theta, neutral, gain):
-#     thirds = np.radians([0, 120, 240])                         #モーター位置(3分割)
-#     contributions = [r * np.cos(theta - t) for t in thirds]     #投影から貢献度を算出
-#     mean = sum(contributions)/3
-#     offsets = [c - mean for c in contributions]                 #平均除去:引っ張りすぎないため
-#     servos = [int(neutral[i] + gain * offsets[i]) for i in range(3)] #制御量算出
-#     servos = np.clip(servos, 0, 255)    #8ビットに丸め込み
-#     return servos
+#極座標からサーボ制御量
+def servo_control(r, theta, neutral, gain):
+    thirds = np.radians([0, 120, 240])                         #モーター位置(3分割)
+    contributions = [r * np.cos(theta - t) for t in thirds]     #投影から貢献度を算出
+    mean = sum(contributions)/3
+    offsets = [c - mean for c in contributions]                 #平均除去:引っ張りすぎないため
+    servos = [int(neutral[i] + gain * offsets[i]) for i in range(3)] #制御量算出
+    servos = np.clip(servos, 0, 255)    #8ビットに丸め込み
+    return servos
 
 main()
