@@ -1,0 +1,71 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36" version="29.6.1">
+  <diagram name="Tulip Interaction Architecture" id="0">
+    <mxGraphModel dx="1209" dy="714" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="583" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="digital" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BFE8E7;fontSize=20;fontStyle=1;verticalAlign=bottom;strokeColor=#0e8088;strokeWidth=3;" value="DIGITAL SYSTEM" vertex="1">
+          <mxGeometry height="300" width="1200" x="277" y="860" as="geometry" />
+        </mxCell>
+        <mxCell id="physical" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;fontSize=20;fontStyle=1;verticalAlign=top;strokeColor=#10739e;gradientColor=none;strokeWidth=3;" value="PHYSICAL WORLD" vertex="1">
+          <mxGeometry height="300" width="1200" x="277" y="489" as="geometry" />
+        </mxCell>
+        <mxCell id="hand" parent="1" style="shape=image;image=https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f446.svg;verticalLabelPosition=bottom;fontSize=16;" value="Hand" vertex="1">
+          <mxGeometry height="80" width="80" x="317" y="579" as="geometry" />
+        </mxCell>
+        <mxCell id="cam1" parent="1" style="shape=image;image=https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f4f9.svg;verticalLabelPosition=bottom;fontSize=16;" value="Camera1&#xa;Hand Capture" vertex="1">
+          <mxGeometry height="80" width="80" x="467" y="579" as="geometry" />
+        </mxCell>
+        <mxCell id="cam2" parent="1" style="shape=image;image=https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f4f9.svg;verticalLabelPosition=bottom;fontSize=16;" value="Camera2&#xa;Tulip Capture" vertex="1">
+          <mxGeometry height="80" width="80" x="967" y="579" as="geometry" />
+        </mxCell>
+        <mxCell id="tulip" parent="1" style="shape=image;image=https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f337.svg;verticalLabelPosition=bottom;fontSize=16;" value="Tulip Robot" vertex="1">
+          <mxGeometry height="90" width="90" x="817" y="579" as="geometry" />
+        </mxCell>
+        <UserObject label="PC1&#xa;Hand Detection&#xa;&lt;Python MediaPipe&gt;" id="pc1">
+          <mxCell parent="1" style="shape=image;image=https://viz.mediapipe.dev/logo.png;verticalLabelPosition=bottom;fontSize=16;" vertex="1">
+            <mxGeometry height="100" width="100" x="517" y="919" as="geometry" />
+          </mxCell>
+        </UserObject>
+        <mxCell id="esp32" parent="1" style="shape=image;image=https://upload.wikimedia.org/wikipedia/commons/8/87/Arduino_Logo.svg;verticalLabelPosition=bottom;fontSize=16;" value="ESP32&#xa;Motor Control" vertex="1">
+          <mxGeometry height="80" width="118" x="767" y="929" as="geometry" />
+        </mxCell>
+        <mxCell id="pc2" parent="1" style="shape=image;image=https://cdn.prod.website-files.com/680a070c3b99253410dd3dcf/68e4ec2bdb0747b7b58b1397_Ultralytics%20YOLO-Icon.svg;verticalLabelPosition=bottom;fontSize=16;" value="PC2&#xa;Tulip Detection&#xa;&lt;Python YOLO/CoreML&gt;" vertex="1">
+          <mxGeometry height="105" width="100" x="1017" y="919" as="geometry" />
+        </mxCell>
+        <mxCell id="unity" parent="1" style="shape=image;image=https://cg-kenkyujo.com/img/category/unity/img_overview_logo2.png;verticalLabelPosition=bottom;fontSize=16;" value="PC3&#xa;Unity Visualization" vertex="1">
+          <mxGeometry height="100" width="100" x="1267" y="919" as="geometry" />
+        </mxCell>
+        <mxCell id="display" parent="1" style="shape=image;image=https://raw.githubusercontent.com/twitter/twemoji/master/assets/svg/1f5a5.svg;verticalLabelPosition=bottom;fontSize=16;" value="Display" vertex="1">
+          <mxGeometry height="90" width="90" x="1317" y="579" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="cam1" style="labelBackgroundColor=none;" target="pc1" value="Video">
+          <mxGeometry relative="1" x="0.3113" y="-3" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="pc1" style="labelBackgroundColor=none;" target="esp32" value="Finger Distance/Rotation&#xa;USB Serial">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="esp32" style="labelBackgroundColor=none;" target="tulip" value="Servo Angle">
+          <mxGeometry relative="1" x="-0.2389" y="1" as="geometry">
+            <mxPoint y="1" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="cam2" style="labelBackgroundColor=none;" target="pc2" value="Video">
+          <mxGeometry relative="1" x="0.3117" y="-3" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="pc2" style="labelBackgroundColor=none;" target="unity" value="Tulip Position&#xa;UDP">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="unity" style="labelBackgroundColor=none;" target="display" value="Render">
+          <mxGeometry relative="1" x="-0.283" y="-5" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
