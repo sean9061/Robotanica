@@ -35,6 +35,8 @@
 
 ![システム構成図](docs/system_image.svg)
 
+![設置レイアウト図](docs/layout.drawio.svg)
+
 ```
 mac2: Hand Tracker
   カメラ → MediaPipe → Serial (Arduino ESP32)
@@ -63,144 +65,12 @@ Arduino ESP32
 
 | メンバー | GitHub | 担当 |
 |----------|--------|------|
-| かっきー | [@kackason](https://github.com/kackason) | MediaPipe による手トラッキング実装・Unity 3D 可視化シーン構築 |
-| しーすー | [@ta2ya225](https://github.com/ta2ya225) | Arduino ESP32 ファームウェア・ステッピングモーター機構・植物へのワイヤー取り付けなどハードウェア全般 |
-| フィシャ | [@sean9061](https://github.com/sean9061) | YOLO によるチューリップ検出モデル・マルチマシン LAN 構成・リアルタイムダッシュボード開発 |
+| <nobr>かっきー</nobr> | [@kackason](https://github.com/kackason) | MediaPipe による手トラッキング実装・Unity 3D 可視化シーン構築 |
+| <nobr>しーすー</nobr> | [@ta2ya225](https://github.com/ta2ya225) | Arduino ESP32 ファームウェア・ステッピングモーター機構・植物へのワイヤー取り付けなどハードウェア全般 |
+| <nobr>フィシャ</nobr> | [@sean9061](https://github.com/sean9061) | YOLO によるチューリップ検出モデル・マルチマシン LAN 構成・リアルタイムダッシュボード開発 |
 
 ---
 
-## 前提条件
-
-### 共通
-- Git
-
-### mac2 / mac3 (Python 環境)
-- Python 3.10 以上
-- USB接続のWebカメラ
-- （mac3のみ）Apple Silicon Mac（CoreML推論に必要）
-
-### win1 (Unity + ダッシュボード)
-- Unity 2022 LTS 以上
-- Python 3.10 以上
-
-### ハードウェア
-- Arduino ESP32 開発ボード
-- ステッピングモーター × 3
-- スイッチングハブ（マルチマシン接続用）
-
----
-
-## インストール
-
-### 1. リポジトリのクローン
-
-```bash
-git clone https://github.com/sean9061/Kinetic-Botanics.git
-cd Kinetic-Botanics
-```
-
-### 2. Hand Tracker のセットアップ（mac2）
-
-```bash
-cd ai/hand_tracker
-pip install -r requirements.txt
-```
-
-### 3. Tulip Tracker のセットアップ（mac3）
-
-```bash
-cd ai/tulip_tracker
-pip install -r requirements.txt
-```
-
-### 4. ダッシュボードのセットアップ（win1）
-
-```bash
-cd dashboard
-pip install -r requirements.txt
-```
-
-### 5. Arduino ファームウェアの書き込み
-
-Arduino IDE で `hardware/arduino_from_mediapipe.ino` を ESP32 に書き込みます（ボーレート: 115200）。
-
-ライブラリ: `ESP32Servo`（Arduino IDE のライブラリマネージャーからインストール）
-
-### 6. Unity プロジェクトを開く
-
-Unity Hub から `unity_projects/try_interactive/` を Unity 2022 LTS で開きます。
-
----
-
-## 設定
-
-各スクリプトの先頭にある定数を環境に合わせて変更してください。
-
-| ファイル | 定数 | 説明 |
-|---------|------|------|
-| `ai/hand_tracker/mediapipe_to_arduino.py` | `SERIAL_PORT` | ArduinoのCOMポート（例: `/dev/tty.usbserial-0001`） |
-| `ai/hand_tracker/mediapipe_to_arduino.py` | `DASHBOARD_IP` | ダッシュボードを動かすマシンのIPアドレス |
-| `ai/tulip_tracker/predict.py` | `DASHBOARD_IP` | 同上 |
-| `ai/tulip_tracker/predict.py` | `UNITY_HOST` | UnityマシンのIPアドレス |
-
----
-
-## 使い方
-
-本番環境では各マシンで以下を起動します。
-
-### mac2: Hand Tracker
-
-```bash
-cd ai/hand_tracker
-python mediapipe_to_arduino.py
-# カメラ映像ウィンドウが開き、右手を検出するとステッピングモーターが動きます
-# ESC キーで終了
-```
-
-### mac3: Tulip Tracker
-
-```bash
-cd ai/tulip_tracker
-python predict.py
-# カメラ映像とYOLO検出結果がウィンドウに表示されます
-# スライダーで検出閾値を調整できます (デフォルト: 80%)
-# q キーで終了
-```
-
-### win1: ダッシュボード（本番）
-
-```bash
-python dashboard/dashboard.py --hand-host [mac2のIP] --tulip-host [mac3のIP]
-```
-
-### ローカルテスト（1台で全部動かす場合）
-
-各スクリプトの `DASHBOARD_IP` を `127.0.0.1` に変更した上で:
-
-```bash
-# ターミナル1
-python ai/hand_tracker/mediapipe_to_arduino.py
-
-# ターミナル2
-python ai/tulip_tracker/predict.py
-
-# ターミナル3
-python dashboard/dashboard.py --hand-host 127.0.0.1 --tulip-host 127.0.0.1
-```
-
-### Unity シーン
-
-`unity_projects/try_interactive/Assets/Scenes/` から用途に合わせてシーンを選択:
-
-| シーン | 内容 |
-|--------|------|
-| `UDP Interactive.unity` | 花の位置でオブジェクトをインタラクティブ制御 |
-| `UDP Dwarf.unity` | ドワーフキャラクターを制御 |
-| `UDP Joint.unity` | 骨格アニメーション |
-| `Serial Interactive.unity` | シリアル（Arduino）による制御 |
-
----
 ## ディレクトリ構成
 
 ```
