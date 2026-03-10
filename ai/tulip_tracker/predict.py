@@ -11,7 +11,7 @@ import time
 # ===== ダッシュボード連携 ここまで =====
 
 # ダッシュボードのIPアドレス ← 環境に合わせて変更
-DASHBOARD_IP = "127.0.0.1"
+DASHBOARD_IP = "192.168.10.100"
 
 # 見事に変換できたMac専用モデルを読み込む！
 model = YOLO('best.mlpackage')
@@ -21,7 +21,7 @@ source = 0
 results = model(source, stream=True)
 
 # UDP送信の設定 (Unity側は同じポートで受信する)
-UNITY_HOST = '192.168.10.2'
+UNITY_HOST = '192.168.10.102'
 UNITY_PORT = 5004
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
