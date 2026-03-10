@@ -111,12 +111,12 @@ Material:
     - _FoamAmount: 1
     - _FoamBubbleScale: 5
     - _FoamBubbleSpeed: 0.2
-    - _FoamCutoff: 0.5
+    - _FoamCutoff: 0.65
     - _FoamEdgeBlend: 1
     - _FoamLineWidth: 0.1
-    - _FoamNoiseScale: 1.99
+    - _FoamNoiseScale: 0.92
     - _FoamSoftness: 0.05
-    - _FoamSpeed: 2.89
+    - _FoamSpeed: 4.17
     - _FoamWidth: 0.1
     - _GlossMapScale: 1
     - _Glossiness: 0.968
@@ -155,15 +155,15 @@ Material:
     - _TransparencySpeed: 1
     - _TransparencyStrength: 0.75
     - _UVSec: 0
-    - _WaveAmount: 1
+    - _WaveAmount: 1.44
     - _WaveAmplitude: 0.1
     - _WaveDistance: 1
     - _WaveDistortionAmount: 0.1
     - _WaveDistortionSpeed: 0.1
-    - _WaveFrequency: 1
+    - _WaveFrequency: 1.68
     - _WaveLength: 1.54
     - _WaveNormalStrength: 0.376
-    - _WaveSpeed: 0.4
+    - _WaveSpeed: 1.41
     - _WaveStrength: 0.1
     - _ZWrite: 1
     m_Colors:

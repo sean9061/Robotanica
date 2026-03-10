@@ -136,9 +136,9 @@ Shader "Custom/BasicToonWaterShader"
             
             // Generate smoother wave movement
             float2 waveOffset = float2(
-                noise(uv * _WaveFrequency + _Time.y * _WaveSpeed),
-                noise(uv * _WaveFrequency * 1.2 + _Time.y * _WaveSpeed * 1.1)
-            ) * _WaveAmount;
+            noise(float2(uv.x * _WaveFrequency + _Time.y * _WaveSpeed, uv.y)),
+            noise(float2(uv.x, uv.y * _WaveFrequency + _Time.y * _WaveSpeed))
+        ) * _WaveAmount;
 
             // Apply distortion with control
             float2 distortedUV = uv + waveOffset * _WaveStrength * _TextureDistortion;
