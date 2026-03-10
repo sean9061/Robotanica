@@ -1,10 +1,12 @@
 # 🌷 Kinetic-Botanics
 
-[![License](https://img.shields.io/badge/license-【ライセンス名】-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python)](https://www.python.org/)
 [![Unity](https://img.shields.io/badge/Unity-2022%20LTS-000000?logo=unity)](https://unity.com/)
 [![Arduino](https://img.shields.io/badge/Arduino-ESP32-00979D?logo=arduino)](https://www.arduino.cc/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](https://github.com)
+[![MediaPipe](https://img.shields.io/badge/MediaPipe-0.10.14-00BCD4?logo=google)](https://mediapipe.dev/)
+[![YOLO](https://img.shields.io/badge/YOLO-v2.6-00FFFF?logo=ultralytics)](https://docs.ultralytics.com/)
 
 > コンピュータビジョン・サーボ制御・リアルタイム3D可視化を融合した、インタラクティブ体感型アートインスタレーション。
 
@@ -294,7 +296,7 @@ Kinetic-Botanics/
 
 ## ライセンス
 
-このプロジェクトは **【ライセンス名（例: MIT License）】** のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルをご確認ください。
+このプロジェクトは **MIT License** のもとで公開されています。詳細は [LICENSE](LICENSE) ファイルをご確認ください。
 
 ---
 
